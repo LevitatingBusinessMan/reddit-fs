@@ -11,6 +11,14 @@ use lazy_static::lazy_static;
 struct RedditFS;
 static README_TEXT: &'static str = "Reddit filesystem\n";
 
+macro_rules! debug {
+    ($($arg:tt)*) => ({
+        if cfg!(debug_assertions) {
+            eprintln!($($arg)*);
+        }
+    })
+}
+
 lazy_static! {
     static ref REDDIT_DIR_ATTR: FileAttr = FileAttr {
         ino: 1,
@@ -56,6 +64,8 @@ impl Filesystem for RedditFS {
         let path = Path::new(name);
         let name = path.file_name().unwrap().to_str().unwrap();
         
+        debug!("lookup: parent {:?} {:?}", parent, name);
+
         if parent == 1 && name == "README.txt" {
             reply.entry(&TTL, &README_FILE_ATTR, 0);
         } else {
@@ -64,6 +74,7 @@ impl Filesystem for RedditFS {
     }
 
     fn getattr(&mut self, req: &Request, ino: u64, reply: ReplyAttr) {
+        debug!("getattr: ino {:?}", ino);
         match ino {
             1 => reply.attr(&TTL, &REDDIT_DIR_ATTR),
             2 => reply.attr(&TTL, &README_FILE_ATTR),
@@ -71,6 +82,7 @@ impl Filesystem for RedditFS {
         }
     }
     fn readdir(&mut self, _req: &Request<'_>, ino: u64, _fh: u64, offset: i64, mut reply: fuser::ReplyDirectory) {
+        debug!("readdir: ino {:?} offset {:?}", ino, offset);
         if ino != 1 {
             reply.error(ENOENT);
             return;
@@ -92,6 +104,7 @@ impl Filesystem for RedditFS {
     }
 
     fn read(&mut self, _req: &Request<'_>, ino: u64,_fh: u64, _offset: i64, _size: u32, _flags: i32, lock_owner: Option<u64>, reply: ReplyData) {
+        debug!("read: ino {:?} offset {:?}", ino, _offset);
         if ino == 2 {
             reply.data(README_TEXT.as_bytes());
         } else {
