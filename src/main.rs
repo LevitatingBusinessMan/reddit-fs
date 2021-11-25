@@ -7,6 +7,8 @@ use std::time::Duration;
 use std::time::{UNIX_EPOCH, SystemTime};
 use libc::ENOENT;
 use lazy_static::lazy_static;
+use orca::App as RedditCLient;
+use orca::Sort as RedditSort;
 
 struct RedditFS;
 static README_TEXT: &'static str = "Reddit filesystem\n";
@@ -57,20 +59,38 @@ lazy_static! {
     };
 }
 
+thread_local! {
+    static  REDDIT_CLIENT: orca::App = RedditCLient::new("reddit-fs", env!("CARGO_PKG_VERSION"), "LevitatingBusinessMan").unwrap();
+}
+
 const TTL: Duration = Duration::from_secs(1);
 
 impl Filesystem for RedditFS {
     fn lookup(&mut self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        let path = Path::new(name);
-        let name = path.file_name().unwrap().to_str().unwrap();
-        
+        let name = name.to_str().unwrap();
         debug!("lookup: parent {:?} {:?}", parent, name);
 
-        if parent == 1 && name == "README.txt" {
-            reply.entry(&TTL, &README_FILE_ATTR, 0);
-        } else {
-            reply.error(ENOENT);
+        if parent == 1 {
+            if name == "README.txt" {
+                reply.entry(&TTL, &README_FILE_ATTR, 0);
+                return;
+            } else if !name.contains(".") {
+                REDDIT_CLIENT.with(|reddit| {
+                    let fetch_result = reddit.get_posts(name, RedditSort::Hot);
+                    match fetch_result {
+                        Ok(res) => {
+                            println!("{:?}", res);
+                        },
+                        Err(err) => {
+                            eprint!("{}", "Request failed");
+                        }  
+                    }
+                });
+                return;
+            }
         }
+
+        reply.error(ENOENT);
     }
 
     fn getattr(&mut self, req: &Request, ino: u64, reply: ReplyAttr) {
