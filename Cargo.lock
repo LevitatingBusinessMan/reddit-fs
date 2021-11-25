@@ -881,6 +881,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "orca",
+ "serde_json",
 ]
 
 [[package]]

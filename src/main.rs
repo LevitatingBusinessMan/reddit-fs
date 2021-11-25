@@ -9,6 +9,8 @@ use libc::ENOENT;
 use lazy_static::lazy_static;
 use orca::App as RedditCLient;
 use orca::Sort as RedditSort;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 struct RedditFS;
 static README_TEXT: &'static str = "Reddit filesystem\n";
@@ -26,7 +28,7 @@ lazy_static! {
         ino: 1,
         size: 0,
         blocks: 0,
-        atime: SystemTime::now(), // 1970-01-01 00:00:00
+        atime: SystemTime::now(),
         mtime: SystemTime::now(),
         ctime: SystemTime::now(),
         crtime: SystemTime::now(),
@@ -44,7 +46,7 @@ lazy_static! {
         ino: 2,
         size: README_TEXT.len() as u64,
         blocks: 1,
-        atime: SystemTime::now(), // 1970-01-01 00:00:00
+        atime: SystemTime::now(),
         mtime: SystemTime::now(),
         ctime: SystemTime::now(),
         crtime: SystemTime::now(),
@@ -57,7 +59,17 @@ lazy_static! {
         flags: 0,
         blksize: 512,
     };
+
+    static ref files: Mutex<HashMap<String, File>> = {let mut m = HashMap::new();Mutex::new(m)};
 }
+
+static mut last_inode: u64 = 2;
+
+struct File {
+    content: String,
+    attr: FileAttr,
+}
+
 
 thread_local! {
     static  REDDIT_CLIENT: orca::App = RedditCLient::new("reddit-fs", env!("CARGO_PKG_VERSION"), "LevitatingBusinessMan").unwrap();
@@ -79,7 +91,10 @@ impl Filesystem for RedditFS {
                     let fetch_result = reddit.get_posts(name, RedditSort::Hot);
                     match fetch_result {
                         Ok(res) => {
-                            println!("{:?}", res);
+                            let posts = res.get("data").unwrap().get("children").unwrap();
+                            /* for post in posts.as_array().unwrap() {
+                                reply.entry(&TTL, &create_post_file(post), 0);
+                            } */ // This code should be moved to readdir instead. Lookup should return the subreddit as a directory.
                         },
                         Err(err) => {
                             eprint!("{}", "Request failed");
@@ -130,6 +145,44 @@ impl Filesystem for RedditFS {
         } else {
             reply.error(ENOENT);
         }
+    }
+}
+
+fn create_post_file(post: &serde_json::Value) -> FileAttr {
+    let kind = post.get("kind").unwrap();
+    let data = post.get("data").unwrap();
+    let id = data.get("id").unwrap();
+
+    //TODO: edge cases
+    let content = (if kind == "t3" {data.get("url").unwrap()} else {data.get("selftext").unwrap()}).to_string();
+
+    unsafe {
+        last_inode += 1;
+        let attr = FileAttr {
+            ino: last_inode,
+            size: content.len() as u64,
+            blocks: 1,
+            atime: SystemTime::now(),
+            mtime: SystemTime::now(),
+            ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
+            kind: FileType::RegularFile,
+            perm: 0o644,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
+
+        let mut files_map = files.lock().unwrap();
+        files_map.insert(id.to_string(), File {
+            content: content.to_string(),
+            attr: attr,
+        });
+
+        attr
     }
 }
 
