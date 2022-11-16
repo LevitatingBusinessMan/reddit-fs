@@ -93,7 +93,7 @@ struct File {
 
 const TTL: Duration = Duration::from_secs(1);
 
-//https://libfuse.github.io/doxygen/structfuse__operations.html
+//https://libfuse.github.io/doxygen/structfuse__lowlevel__ops.html
 impl Filesystem for RedditFS {
     fn lookup(&mut self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         let name = name.to_str().unwrap();
