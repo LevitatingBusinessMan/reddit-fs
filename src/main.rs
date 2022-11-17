@@ -325,7 +325,7 @@ impl RedditFS {
 
         //TODO: edge cases
         //https://www.reddit.com/dev/api/#listings
-        let content = (match kind {
+        let mut content = (match kind {
             "t3" => {
                 let url = data.get("url").unwrap();
                 if url.as_str().unwrap().starts_with("https://www.reddit.com/r/") {
@@ -333,7 +333,11 @@ impl RedditFS {
                 } else {url}
             },
             _ => data.get("selftext").unwrap()
-        }).as_str().unwrap().to_string() + "\n";
+        }).as_str().unwrap().to_string();
+
+        if !content.is_empty() {
+            content += "\n";
+        }
 
         let content = content.into_bytes();
 
