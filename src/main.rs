@@ -89,24 +89,6 @@ lazy_static! {
         flags: 0,
         blksize: 512,
     };
-
-    static ref SUBREDDIT_DIR_ATTR: FileAttr = FileAttr {
-        ino: 3,
-        size: 0,
-        blocks: 0,
-        atime: SystemTime::now(),
-        mtime: SystemTime::now(),
-        ctime: SystemTime::now(),
-        crtime: SystemTime::now(),
-        kind: FileType::Directory,
-        perm: 0o755,
-        nlink: 2,
-        uid: 501,
-        gid: 20,
-        rdev: 0,
-        flags: 0,
-        blksize: 512,
-    };
 }
 
 #[derive(Clone)]
