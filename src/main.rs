@@ -16,6 +16,7 @@ use orca::App as RedditCLient;
 use orca::Sort as RedditSort;
 use std::collections::HashMap;
 use orca::LimitMethod;
+use clap::Parser;
 
 type Ino = u64;
 
@@ -46,9 +47,9 @@ static README_TEXT: &'static str = "Reddit filesystem\n";
 
 macro_rules! debug {
     ($($arg:tt)*) => ({
-        if cfg!(debug_assertions) {
+        //if cfg!(debug_assertions) {
             eprintln!($($arg)*);
-        }
+        //}
     })
 }
 
@@ -362,9 +363,17 @@ impl RedditFS {
 
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(help("Directory to mount on"))]
+    directory: String
+}
+
 fn main() -> Result<()> {
+    let args = Args::parse();
     let fs = RedditFS::new();
     fs.reddit.set_ratelimiting(LimitMethod::Steady);
-    fuser::mount2(fs, &Path::new("/home/rein/reddit"), &[])?;
+    fuser::mount2(fs, &Path::new(&args.directory), &[])?;
     Ok(())
 }
