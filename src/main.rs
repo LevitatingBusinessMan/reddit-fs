@@ -145,7 +145,7 @@ impl Filesystem for RedditFS {
             },
 
             // Fetch a post
-            3 => {
+            _ => {
                 let file = self.files.get(name);
                 if let Some(file) = file {
                     reply.entry(&TTL, &file.attr, 0);
@@ -153,7 +153,6 @@ impl Filesystem for RedditFS {
                     reply.error(ENOENT);
                 }
             },
-            _ => reply.error(ENOENT),
         }
 
     }
@@ -280,7 +279,12 @@ impl RedditFS {
 
         //TODO: edge cases
         let content = (match kind {
-            "t3" => data.get("url").unwrap(),
+            "t3" => {
+                let url = data.get("url").unwrap();
+                if url.as_str().unwrap().starts_with("https://www.reddit.com/r/") {
+                    data.get("selftext").unwrap()
+                } else {url}
+            },
             _ => data.get("selftext").unwrap()
         }).as_str().unwrap();
 
@@ -325,7 +329,7 @@ impl RedditFS {
 
         self.last_inode += 1;
         let attr = FileAttr {
-            ino: 3,
+            ino: self.last_inode,
             size: 0,
             blocks: 0,
             atime: SystemTime::now(),
