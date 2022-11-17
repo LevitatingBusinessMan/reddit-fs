@@ -15,11 +15,11 @@ use lazy_static::lazy_static;
 use orca::App as RedditCLient;
 use orca::Sort as RedditSort;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use orca::LimitMethod;
 
 struct RedditFS {
     reddit: orca::App,
-    //files: <HashMap<String, File>,
+    files: HashMap<String, File>
 }
 
 static README_TEXT: &'static str = "Reddit filesystem\n";
@@ -86,8 +86,6 @@ lazy_static! {
         flags: 0,
         blksize: 512,
     };
-
-    static ref files: Mutex<HashMap<String, File>> = {let mut m = HashMap::new();Mutex::new(m)};
 }
 
 static mut last_inode: u64 = 3;
@@ -114,7 +112,7 @@ impl Filesystem for RedditFS {
                     reply.entry(&TTL, &README_FILE_ATTR, 0);
                     return;
                 } else if !name.contains(".") {
-                    let attr = create_subreddit_directory(name);
+                    let attr = self.create_subreddit_directory(name);
                     reply.entry(&TTL, &attr, 0);
                 } else {
                     reply.error(ENOENT);
@@ -123,8 +121,7 @@ impl Filesystem for RedditFS {
 
             // Fetch a post
             3 => {
-                let files_map = files.lock().unwrap();
-                let file = files_map.get(name);
+                let file = self.files.get(name);
                 if let Some(file) = file {
                     reply.entry(&TTL, &file.attr, 0);
                 } else {
@@ -164,8 +161,7 @@ impl Filesystem for RedditFS {
                     return;
                 }
 
-                let files_map = files.lock().unwrap();
-                if let Some((sub, file)) = files_map.iter().find(|(k,file)| file.attr.ino == ino) {
+                if let Some((sub, file)) = self.files.iter().find(|(k,file)| file.attr.ino == ino) {
                     debug!("ino {} is {}", ino, sub);
                     
                     let fetch_result = self.reddit.get_posts(sub, RedditSort::Hot);
@@ -173,8 +169,7 @@ impl Filesystem for RedditFS {
                         Ok(res) => {
                             let posts = res.get("data").unwrap().get("children").unwrap();
                             for post in posts.as_array().unwrap() {
-                                let (id, attr) = create_post_file(post);
-                                debug!("{}", &id);
+                                let (id, attr) = self.create_post_file(post);
                                 entries.push((attr.ino, FileType::RegularFile, id));
                             }
                         },
@@ -204,8 +199,7 @@ impl Filesystem for RedditFS {
         if ino == 2 {
             reply.data(README_TEXT.as_bytes());
         } else {
-            let files_map = files.lock().unwrap();
-            if let Some((_key, file)) = files_map.iter().find(|(k,file)| file.attr.ino == ino) {
+            if let Some((_key, file)) = self.files.iter().find(|(k,file)| file.attr.ino == ino) {
                 reply.data(file.content.as_ref().unwrap().as_bytes());
             } else {
                 reply.error(ENOENT);
@@ -214,92 +208,93 @@ impl Filesystem for RedditFS {
     }
 }
 
-// TODO: error handling
-fn create_post_file(post: &serde_json::Value) -> (String, FileAttr) {
-    let kind = post.get("kind").unwrap();
-    let data = post.get("data").unwrap();
-    let id = data.get("id").unwrap().as_str().unwrap().to_owned();
+impl RedditFS {
+    // TODO: error handling
+    fn create_post_file(&mut self, post: &serde_json::Value) -> (String, FileAttr) {
+        let kind = post.get("kind").unwrap();
+        let data = post.get("data").unwrap();
+        let id = data.get("id").unwrap().as_str().unwrap().to_owned();
+        
+        if let Some(file) = self.files.get(&id) {
+            return (id, file.attr)
+        }
 
-    debug!("wait {}", id);
-    let mut files_map = files.lock().unwrap();
-    debug!("ok");
-    
-    if let Some(file) = files_map.get(&id) {
-        return (id, file.attr)
+        //TODO: edge cases
+        let content = (if kind == "t3" {data.get("url").unwrap()} else {data.get("selftext").unwrap()}).to_string();
+
+        unsafe {
+            last_inode += 1;
+            let attr = FileAttr {
+                ino: last_inode,
+                size: content.len() as u64,
+                blocks: 1,
+                atime: SystemTime::now(),
+                mtime: SystemTime::now(),
+                ctime: SystemTime::now(),
+                crtime: SystemTime::now(),
+                kind: FileType::RegularFile,
+                perm: 0o644,
+                nlink: 1,
+                uid: 501,
+                gid: 20,
+                rdev: 0,
+                flags: 0,
+                blksize: 512,
+            };
+
+            self.files.insert(
+                id.clone(),
+                File {
+                    content: Some(content.to_string()),
+                    attr: attr,
+                },
+            );
+
+            debug!("saved post {}", &id);
+            (id, attr)
+        }
     }
 
-    //TODO: edge cases
-    let content = (if kind == "t3" {data.get("url").unwrap()} else {data.get("selftext").unwrap()}).to_string();
+    // TOOD: Make sure these subs exist
+    fn create_subreddit_directory(&mut self, sub: &str) -> FileAttr {
+        let sub = sub.to_owned();
 
-    unsafe {
-        last_inode += 1;
-        let attr = FileAttr {
-            ino: last_inode,
-            size: content.len() as u64,
-            blocks: 1,
-            atime: SystemTime::now(),
-            mtime: SystemTime::now(),
-            ctime: SystemTime::now(),
-            crtime: SystemTime::now(),
-            kind: FileType::RegularFile,
-            perm: 0o644,
-            nlink: 1,
-            uid: 501,
-            gid: 20,
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        };
+        if let Some(file) = self.files.get(&sub) {
+            return file.attr
+        }
 
-        files_map.insert(
-            id.clone(),
-            File {
-                content: Some(content.to_string()),
-                attr: attr,
-            },
-        );
+        unsafe {
+            last_inode += 1;
+            let attr = FileAttr {
+                ino: 3,
+                size: 0,
+                blocks: 0,
+                atime: SystemTime::now(),
+                mtime: SystemTime::now(),
+                ctime: SystemTime::now(),
+                crtime: SystemTime::now(),
+                kind: FileType::Directory,
+                perm: 0o755,
+                nlink: 2,
+                uid: 501,
+                gid: 20,
+                rdev: 0,
+                flags: 0,
+                blksize: 512,
+            };
 
-        debug!("saved post {}", &id);
-        (id, attr)
-    }
-}
+            debug!("saved sub {}", &sub);
 
-// TOOD: Make sure these subs exist
-fn create_subreddit_directory(sub: &str) -> FileAttr {
-    let sub = sub.to_owned();
-    let mut files_map = files.lock().unwrap();
+            self.files.insert(
+                sub,
+                File {
+                    content: None,
+                    attr: attr,
+                },
+            );
 
-    unsafe {
-        last_inode += 1;
-        let attr = FileAttr {
-            ino: 3,
-            size: 0,
-            blocks: 0,
-            atime: SystemTime::now(),
-            mtime: SystemTime::now(),
-            ctime: SystemTime::now(),
-            crtime: SystemTime::now(),
-            kind: FileType::Directory,
-            perm: 0o755,
-            nlink: 2,
-            uid: 501,
-            gid: 20,
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        };
-
-        debug!("saved sub {}", &sub);
-
-        files_map.insert(
-            sub,
-            File {
-                content: None,
-                attr: attr,
-            },
-        );
-
-        attr
+            attr
+        }
     }
 }
 
@@ -309,9 +304,10 @@ fn main() -> Result<()> {
             "reddit-fs",
             env!("CARGO_PKG_VERSION"),
             "LevitatingBusinessMan",
-        )
-        .unwrap(),
+        ).unwrap(),
+        files: HashMap::new()
     };
+    fs.reddit.set_ratelimiting(LimitMethod::Steady);
     fuser::mount2(fs, &Path::new("/home/rein/reddit"), &[])?;
     Ok(())
 }
