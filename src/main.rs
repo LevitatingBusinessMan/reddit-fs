@@ -229,10 +229,11 @@ impl RedditFS {
     fn create_post_file(&mut self, post: &serde_json::Value) -> (String, FileAttr) {
         let kind = post.get("kind").unwrap().as_str().unwrap();
         let data = post.get("data").unwrap();
-        let id = data.get("id").unwrap().as_str().unwrap().to_owned();
-        
-        if let Some(file) = self.files.get(&id) {
-            return (id, file.attr)
+        let _id = data.get("id").unwrap().as_str().unwrap().to_owned();
+        let title = data.get("title").unwrap().as_str().unwrap().to_owned();
+
+        if let Some(file) = self.files.get(&title) {
+            return (title, file.attr)
         }
 
         //TODO: edge cases
@@ -261,15 +262,15 @@ impl RedditFS {
         };
 
         self.files.insert(
-            id.clone(),
+            title.clone(),
             File {
                 content: Some(content.to_string() + "\n"),
                 attr: attr,
             },
         );
 
-        debug!("saved post {}", &id);
-        (id, attr)
+        debug!("saved post {}", &title);
+        (title, attr)
     }
 
     // TOOD: Make sure these subs exist
