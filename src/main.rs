@@ -91,24 +91,24 @@ lazy_static! {
     };
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Post {
     id: String,
     content: Vec<u8>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Sub {
     posts: Option<Vec<Ino>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum FileKind {
     Sub(Sub),
     Post(Post)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct File {
     name: String,
     attr: FileAttr,
@@ -145,8 +145,14 @@ impl Filesystem for RedditFS {
                     match &file.kind {
                         FileKind::Sub(sub) => {
                             if let Some(posts) = &sub.posts {
-                                if let Some(ino) = posts.iter().find(|ino| self.files.contains_key(ino)) {
-                                    reply.entry(&TTL, &self.files.get(ino).unwrap().attr, *ino); 
+                                if let Some(ino) = posts.iter().find(|ino| {
+                                    if let Some(file) = self.files.get(ino) {
+                                        file.name == name
+                                    } else {
+                                        false
+                                    }
+                                }) {
+                                    reply.entry(&TTL, &self.files.get(ino).unwrap().attr, 0); 
                                     return;  
                                 }
                             }
@@ -252,14 +258,12 @@ impl Filesystem for RedditFS {
             }
         }
 
-        let mut current_offset = offset + 1;
         for (i, entry) in entries.into_iter().enumerate().skip(offset as usize) {
-            debug!("reply ino {} offset {} name {} ", entry.0, i + 1, entry.2);
+            //debug!("reply ino {} offset {} name {} ", entry.0, i + 1, entry.2);
             // i + 1 means the index of the next entry
-            if reply.add(entry.0, current_offset, entry.1, entry.2) {
+            if reply.add(entry.0, (i + 1) as i64, entry.1, entry.2) {
                 break
             };
-            current_offset += 1;
         }
 
         reply.ok();
