@@ -3,8 +3,6 @@ fuse: failed to access mountpoint /home/rein/reddit: Transport endpoint is not c
 fusermount -u ~/reddit
 */
 
-use core::str::Bytes;
-use std::any;
 use fuser::{FileAttr, Filesystem, ReplyAttr, ReplyEntry, Request, FileType, ReplyData};
 use std::path::Path;
 use anyhow::Result;
@@ -147,7 +145,7 @@ impl Filesystem for RedditFS {
                     match &file.kind {
                         FileKind::Sub(sub) => {
                             if let Some(posts) = &sub.posts {
-                                if let Some(ino) = posts.iter().find(|(ino)| self.files.contains_key(ino)) {
+                                if let Some(ino) = posts.iter().find(|ino| self.files.contains_key(ino)) {
                                     reply.entry(&TTL, &self.files.get(ino).unwrap().attr, *ino); 
                                     return;  
                                 }
