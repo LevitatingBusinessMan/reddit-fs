@@ -155,8 +155,8 @@ impl Filesystem for RedditFS {
         }
     }
 
-    fn readdir(&mut self, _req: &Request<'_>, ino: u64, _fh: u64, offset: i64, mut reply: fuser::ReplyDirectory) {
-        debug!("readdir: ino {:?} offset {:?}", ino, offset);
+    fn readdir(&mut self, _req: &Request<'_>, ino: u64, size: u64, offset: i64, mut reply: fuser::ReplyDirectory) {
+        debug!("readdir: ino {:?} offset {:?} size {:?}", ino, offset, size);
         
         // So the offsets can be added later
         let mut entries: Vec<(u64, FileType, String)> = vec![
@@ -173,6 +173,7 @@ impl Filesystem for RedditFS {
                     return;
                 }
 
+                //I should be finding by parent and then by ino here
                 if let Some((sub, file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
                     debug!("ino {} is {}", ino, sub);
                 
@@ -226,11 +227,14 @@ impl Filesystem for RedditFS {
             }
         }
 
+        let mut current_offset = offset + 1;
         for (i, entry) in entries.into_iter().enumerate().skip(offset as usize) {
+            debug!("reply ino {} offset {} name {} ", entry.0, i + 1, entry.2);
             // i + 1 means the index of the next entry
-            if reply.add(entry.0, (i + 1) as i64, entry.1, entry.2) {
+            if reply.add(entry.0, current_offset, entry.1, entry.2) {
                 break
             };
+            current_offset += 1;
         }
 
         reply.ok();
@@ -259,8 +263,14 @@ impl RedditFS {
         let kind = post.get("kind").unwrap().as_str().unwrap();
         let data = post.get("data").unwrap();
         let _id = data.get("id").unwrap().as_str().unwrap().to_owned();
-        let title = data.get("title").unwrap().as_str().unwrap().to_owned();
+        let mut title = data.get("title").unwrap().as_str().unwrap().to_owned();
 
+        //There are either broken titles I have to hunt
+        if [".",".."].contains(&title.as_str()) {
+            title = format!("\"{}\"", title);
+        }
+
+        //Titles can be duplicate, something to consider
         if let Some(file) = self.files.get(&title) {
             return (title, file.attr)
         }
