@@ -211,7 +211,7 @@ impl Filesystem for RedditFS {
 impl RedditFS {
     // TODO: error handling
     fn create_post_file(&mut self, post: &serde_json::Value) -> (String, FileAttr) {
-        let kind = post.get("kind").unwrap();
+        let kind = post.get("kind").unwrap().as_str().unwrap();
         let data = post.get("data").unwrap();
         let id = data.get("id").unwrap().as_str().unwrap().to_owned();
         
@@ -220,7 +220,10 @@ impl RedditFS {
         }
 
         //TODO: edge cases
-        let content = (if kind == "t3" {data.get("url").unwrap()} else {data.get("selftext").unwrap()}).to_string();
+        let content = (match kind {
+            "t3" => data.get("url").unwrap(),
+            _ => data.get("selftext").unwrap()
+        }).as_str().unwrap();
 
         unsafe {
             last_inode += 1;
