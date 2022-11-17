@@ -278,6 +278,7 @@ impl RedditFS {
         }
 
         //TODO: edge cases
+        //https://www.reddit.com/dev/api/#listings
         let content = (match kind {
             "t3" => {
                 let url = data.get("url").unwrap();
@@ -286,7 +287,7 @@ impl RedditFS {
                 } else {url}
             },
             _ => data.get("selftext").unwrap()
-        }).as_str().unwrap();
+        }).as_str().unwrap().to_string() + "\n";
 
         self.last_inode += 1;
         let attr = FileAttr {
@@ -310,7 +311,7 @@ impl RedditFS {
         self.files.insert(
             title.clone(),
             File {
-                content: Content::Post(content.to_string() + "\n"),
+                content: Content::Post(content),
                 attr: attr,
             },
         );
