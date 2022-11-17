@@ -19,7 +19,22 @@ use orca::LimitMethod;
 
 struct RedditFS {
     reddit: orca::App,
-    files: HashMap<String, File>
+    files: HashMap<String, File>,
+    last_inode: u64
+}
+
+impl RedditFS {
+    pub fn new() -> RedditFS {
+        RedditFS {
+            reddit: RedditCLient::new(
+                "reddit-fs",
+                env!("CARGO_PKG_VERSION"),
+                "LevitatingBusinessMan",
+            ).unwrap(),
+            files: HashMap::new(),
+            last_inode: 3
+        }
+    }
 }
 
 static README_TEXT: &'static str = "Reddit filesystem\n";
@@ -88,8 +103,6 @@ lazy_static! {
     };
 }
 
-static mut last_inode: u64 = 3;
-
 #[derive(Debug)]
 struct File {
     content: Option<String>,
@@ -101,7 +114,7 @@ const TTL: Duration = Duration::from_secs(1);
 /// https://libfuse.github.io/doxygen/structfuse__lowlevel__ops.html
 impl Filesystem for RedditFS {
     /// Look up a directory entry by name and get its attributes.
-    fn lookup(&mut self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
+    fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         let name = name.to_str().unwrap();
         debug!("lookup: parent {:?} {:?}", parent, name);
 
@@ -133,7 +146,7 @@ impl Filesystem for RedditFS {
 
     }
 
-    fn getattr(&mut self, req: &Request, ino: u64, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
         debug!("getattr: ino {:?}", ino);
         match ino {
             1 => reply.attr(&TTL, &REDDIT_DIR_ATTR),
@@ -161,7 +174,7 @@ impl Filesystem for RedditFS {
                     return;
                 }
 
-                if let Some((sub, file)) = self.files.iter().find(|(k,file)| file.attr.ino == ino) {
+                if let Some((sub, _file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
                     debug!("ino {} is {}", ino, sub);
                     
                     let fetch_result = self.reddit.get_posts(sub, RedditSort::Hot);
@@ -173,7 +186,7 @@ impl Filesystem for RedditFS {
                                 entries.push((attr.ino, FileType::RegularFile, id));
                             }
                         },
-                        Err(err) => {
+                        Err(_err) => {
                             reply.error(EIO);
                             eprint!("Reddit request failed");
                             return;
@@ -188,19 +201,22 @@ impl Filesystem for RedditFS {
 
         for (i, entry) in entries.into_iter().enumerate().skip(offset as usize) {
             // i + 1 means the index of the next entry
-            reply.add(entry.0, (i + 1) as i64, entry.1, entry.2);
+            if reply.add(entry.0, (i + 1) as i64, entry.1, entry.2) {
+                break
+            };
         }
 
         reply.ok();
     }
 
-    fn read(&mut self, _req: &Request<'_>, ino: u64,_fh: u64, _offset: i64, _size: u32, _flags: i32, lock_owner: Option<u64>, reply: ReplyData) {
+    fn read(&mut self, _req: &Request<'_>, ino: u64,_fh: u64, _offset: i64, _size: u32, _flags: i32, _lock_owner: Option<u64>, reply: ReplyData) {
         debug!("read: ino {:?} offset {:?}", ino, _offset);
         if ino == 2 {
             reply.data(README_TEXT.as_bytes());
         } else {
-            if let Some((_key, file)) = self.files.iter().find(|(k,file)| file.attr.ino == ino) {
-                reply.data(file.content.as_ref().unwrap().as_bytes());
+            if let Some((_key, file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
+                // FIXME: A newline is added to these bytes but it's never displayed
+                reply.data(file.content.as_ref().unwrap().to_owned().as_bytes());
             } else {
                 reply.error(ENOENT);
             }
@@ -225,37 +241,35 @@ impl RedditFS {
             _ => data.get("selftext").unwrap()
         }).as_str().unwrap();
 
-        unsafe {
-            last_inode += 1;
-            let attr = FileAttr {
-                ino: last_inode,
-                size: content.len() as u64,
-                blocks: 1,
-                atime: SystemTime::now(),
-                mtime: SystemTime::now(),
-                ctime: SystemTime::now(),
-                crtime: SystemTime::now(),
-                kind: FileType::RegularFile,
-                perm: 0o644,
-                nlink: 1,
-                uid: 501,
-                gid: 20,
-                rdev: 0,
-                flags: 0,
-                blksize: 512,
-            };
+        self.last_inode += 1;
+        let attr = FileAttr {
+            ino: self.last_inode,
+            size: content.len() as u64,
+            blocks: 1,
+            atime: SystemTime::now(),
+            mtime: SystemTime::now(),
+            ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
+            kind: FileType::RegularFile,
+            perm: 0o644,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
 
-            self.files.insert(
-                id.clone(),
-                File {
-                    content: Some(content.to_string()),
-                    attr: attr,
-                },
-            );
+        self.files.insert(
+            id.clone(),
+            File {
+                content: Some(content.to_string() + "\n"),
+                attr: attr,
+            },
+        );
 
-            debug!("saved post {}", &id);
-            (id, attr)
-        }
+        debug!("saved post {}", &id);
+        (id, attr)
     }
 
     // TOOD: Make sure these subs exist
@@ -266,50 +280,42 @@ impl RedditFS {
             return file.attr
         }
 
-        unsafe {
-            last_inode += 1;
-            let attr = FileAttr {
-                ino: 3,
-                size: 0,
-                blocks: 0,
-                atime: SystemTime::now(),
-                mtime: SystemTime::now(),
-                ctime: SystemTime::now(),
-                crtime: SystemTime::now(),
-                kind: FileType::Directory,
-                perm: 0o755,
-                nlink: 2,
-                uid: 501,
-                gid: 20,
-                rdev: 0,
-                flags: 0,
-                blksize: 512,
-            };
+        self.last_inode += 1;
+        let attr = FileAttr {
+            ino: 3,
+            size: 0,
+            blocks: 0,
+            atime: SystemTime::now(),
+            mtime: SystemTime::now(),
+            ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
+            kind: FileType::Directory,
+            perm: 0o755,
+            nlink: 2,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
 
-            debug!("saved sub {}", &sub);
+        debug!("saved sub {}", &sub);
 
-            self.files.insert(
-                sub,
-                File {
-                    content: None,
-                    attr: attr,
-                },
-            );
+        self.files.insert(
+            sub,
+            File {
+                content: None,
+                attr: attr,
+            },
+        );
 
-            attr
-        }
+        attr
     }
+
 }
 
 fn main() -> Result<()> {
-    let fs = RedditFS {
-        reddit: RedditCLient::new(
-            "reddit-fs",
-            env!("CARGO_PKG_VERSION"),
-            "LevitatingBusinessMan",
-        ).unwrap(),
-        files: HashMap::new()
-    };
+    let fs = RedditFS::new();
     fs.reddit.set_ratelimiting(LimitMethod::Steady);
     fuser::mount2(fs, &Path::new("/home/rein/reddit"), &[])?;
     Ok(())
