@@ -1,7 +1,7 @@
 # reddit-fs
 Accessing reddit through a filesystem
 ```SH
-$ reddit-fs &
+$ reddit-fs ~/reddit &
 $ ls ~/reddit/linux
 'Announcing Fedora Linux 37'
 'Four years of SourceHut (SourceHut is a open source github alternative)'
@@ -23,4 +23,9 @@ $ ls ~/reddit/linux
 'Windows Subsystem for Linux (WSL) v1.0.0 released'
 $ cat ~/reddit/linux/Announcing\ Fedora\ Linux\ 37
 https://fedoramagazine.org/announcing-fedora-37/
+```
+
+#### Installation
+```SH
+cargo install reddit-fs
 ```
