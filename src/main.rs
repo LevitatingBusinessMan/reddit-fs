@@ -193,7 +193,16 @@ impl Filesystem for RedditFS {
         ];
 
         match ino {
-            1 => entries.push((2, FileType::RegularFile, "README.txt".to_owned())),
+            1 => {
+                entries.push((2, FileType::RegularFile, "README.txt".to_owned()));
+
+                for (ino, file) in self.files.iter() {
+                    if let FileKind::Sub(_) = file.kind {
+                        entries.push((*ino, FileType::Directory, file.name.to_owned()))
+                    }
+                }
+
+            },
             _ => {
                 // 25 results and . ..
                 if offset >= 27 {
