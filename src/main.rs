@@ -17,10 +17,15 @@ use orca::Sort as RedditSort;
 use std::collections::HashMap;
 use orca::LimitMethod;
 
+type Ino = u64;
+
+/// Time to live for the cache in seconds
+const CACHE_TTL: u64 = 120;
+
 struct RedditFS {
     reddit: orca::App,
     files: HashMap<String, File>,
-    last_inode: u64
+    last_inode: Ino
 }
 
 impl RedditFS {
@@ -103,9 +108,16 @@ lazy_static! {
     };
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
+
+enum Content {
+    Post(String),
+    Sub(Option<Vec<Ino>>),
+}
+
+#[derive(Clone)]
 struct File {
-    content: Option<String>,
+    content: Content,
     attr: FileAttr,
 }
 
@@ -174,24 +186,52 @@ impl Filesystem for RedditFS {
                     return;
                 }
 
-                if let Some((sub, _file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
+                if let Some((sub, file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
                     debug!("ino {} is {}", ino, sub);
-                    
-                    let fetch_result = self.reddit.get_posts(sub, RedditSort::Hot);
-                    match fetch_result {
-                        Ok(res) => {
-                            let posts = res.get("data").unwrap().get("children").unwrap();
-                            for post in posts.as_array().unwrap() {
-                                let (id, attr) = self.create_post_file(post);
-                                entries.push((attr.ino, FileType::RegularFile, id));
+                
+                    if let Content::Sub(content) = &file.content {
+                        // Refresh cache
+                        if content.is_none() || SystemTime::now().duration_since(file.attr.mtime).unwrap() > Duration::new(CACHE_TTL, 0) {
+                            let mut inos = vec![];
+                            let fetch_result = self.reddit.get_posts(sub, RedditSort::Hot);
+                            match fetch_result {
+                                Ok(res) => {
+                                    let sub = (*sub).clone();
+                                    let mut file = (*file).clone();
+
+                                    let posts = res.get("data").unwrap().get("children").unwrap();
+                                    for post in posts.as_array().unwrap() {
+                                        let (name, attr) = self.create_post_file(post);
+                                        inos.push(attr.ino);
+                                        entries.push((attr.ino, FileType::RegularFile, name));
+                                    }
+
+                                    file.attr.mtime = SystemTime::now();
+                                    file.content = Content::Sub(Some(inos));
+                                    self.files.insert(sub,file);
+                                },
+                                Err(_err) => {
+                                    reply.error(EIO);
+                                    eprint!("Reddit request failed");
+                                    return;
+                                }
                             }
-                        },
-                        Err(_err) => {
-                            reply.error(EIO);
-                            eprint!("Reddit request failed");
-                            return;
+                        } else {
+                            // use inos
+                            if let Some(inos) = content {
+                                for ino in inos {
+                                    if let Some((name, _file)) = self.files.iter().find(|(_k,file)| file.attr.ino == *ino) {
+                                        entries.push((*ino, FileType::RegularFile, name.clone()));
+                                    }
+                                }
+                            } else {
+                                unreachable!()
+                            }
                         }
+                    } else {
+                        unreachable!()
                     }
+
                 } else {
                     reply.error(ENOENT);
                     return;
@@ -216,7 +256,9 @@ impl Filesystem for RedditFS {
         } else {
             if let Some((_key, file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
                 // FIXME: A newline is added to these bytes but it's never displayed
-                reply.data(file.content.as_ref().unwrap().to_owned().as_bytes());
+                if let Content::Post(content) = &file.content {
+                    reply.data(content.as_bytes());
+                }
             } else {
                 reply.error(ENOENT);
             }
@@ -264,7 +306,7 @@ impl RedditFS {
         self.files.insert(
             title.clone(),
             File {
-                content: Some(content.to_string() + "\n"),
+                content: Content::Post(content.to_string() + "\n"),
                 attr: attr,
             },
         );
@@ -305,7 +347,7 @@ impl RedditFS {
         self.files.insert(
             sub,
             File {
-                content: None,
+                content: Content::Sub(None),
                 attr: attr,
             },
         );
