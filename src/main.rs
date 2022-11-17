@@ -184,8 +184,8 @@ impl Filesystem for RedditFS {
         
         // So the offsets can be added later
         let mut entries: Vec<(u64, FileType, String)> = vec![
-            (1, FileType::Directory, ".".to_owned()),
-            (1, FileType::Directory, "..".to_owned()),
+            (ino, FileType::Directory, ".".to_owned()),
+            (0, FileType::Directory, "..".to_owned()),
         ];
 
         match ino {
@@ -291,10 +291,13 @@ impl RedditFS {
         let id = data.get("id").unwrap().as_str().unwrap().to_owned();
         let mut title = data.get("title").unwrap().as_str().unwrap().to_owned();
 
-        //There are either broken titles I have to hunt
+        //There are probably more broken titles I have to hunt
         if [".",".."].contains(&title.as_str()) {
             title = format!("\"{}\"", title);
         }
+        
+        //Make slashes disappear
+        title = title.replace("/", "");
 
         //Titles can be duplicate, something to consider (only an issue if duplicate within the same sub)
         if let Some((_ino, file)) = self.files.iter().find(|(_ino, file)| {
