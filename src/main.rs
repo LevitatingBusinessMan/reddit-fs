@@ -163,8 +163,13 @@ impl Filesystem for RedditFS {
         match ino {
             1 => reply.attr(&TTL, &REDDIT_DIR_ATTR),
             2 => reply.attr(&TTL, &README_FILE_ATTR),
-            3 => reply.attr(&TTL, &SUBREDDIT_DIR_ATTR),
-            _ => reply.error(ENOENT),
+            _ => {
+                if let Some((_name, file)) = self.files.iter().find(|(_k,file)| file.attr.ino == ino) {
+                    reply.attr(&TTL, &file.attr);
+                } else {
+                    reply.error(ENOENT);
+                }
+            }
         }
     }
 
