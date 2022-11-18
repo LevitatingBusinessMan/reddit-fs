@@ -1,6 +1,6 @@
 [package]
 name = "reddit-fs"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2021"
 description = "Access reddit through a filesystem"
 authors = ["LevitatingBusinessMan"]
