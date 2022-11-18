@@ -462,10 +462,9 @@ fn main() -> Result<()> {
 
     let mount = rx.recv().unwrap().unwrap();
     
-    unsafe{
-        ctrlc::init_os_handler()?;
-        ctrlc::block_ctrl_c()?;
-    }
+    let (tx, rx) = channel();
+    ctrlc::set_handler(move || tx.send(()).unwrap()).unwrap();
+    rx.recv().unwrap();
 
     println!("Attempting to unmount");
     drop(mount);
