@@ -3,6 +3,7 @@ fuse: failed to access mountpoint /home/rein/reddit: Transport endpoint is not c
 fusermount -u ~/reddit
 */
 
+use fuser::Session;
 use fuser::{FileAttr, Filesystem, ReplyAttr, ReplyEntry, Request, FileType, ReplyData};
 use std::path::Path;
 use anyhow::Result;
@@ -17,6 +18,8 @@ use orca::Sort as RedditSort;
 use std::collections::HashMap;
 use orca::LimitMethod;
 use clap::Parser;
+use std::thread;
+use std::sync::mpsc::channel;
 
 type Ino = u64;
 
@@ -436,9 +439,36 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    let (tx, rx) = channel();
+
     let args = Args::parse();
-    let fs = RedditFS::new();
-    fs.reddit.set_ratelimiting(LimitMethod::Steady);
-    fuser::mount2(fs, &Path::new(&args.directory), &[])?;
+
+    // Thread for the FUSER session to run in
+    thread::spawn(move || {
+        let fs = RedditFS::new();
+        fs.reddit.set_ratelimiting(LimitMethod::Steady);
+        let mut sesh = Session::new(fs, &Path::new(&args.directory), &[
+            // The following options only work if "user_allow_other" is enabled in /etc/fuse.conf 
+            //MountOption::AllowOther, MountOption::AutoUnmount, 
+        ]).unwrap();
+
+        // Export the session address for unmounting
+        let mount = std::mem::take(&mut sesh.mount);
+        tx.send(mount).unwrap();
+
+        // Start the session
+        sesh.run().unwrap();
+    });
+
+    let mount = rx.recv().unwrap().unwrap();
+    
+    unsafe{
+        ctrlc::init_os_handler()?;
+        ctrlc::block_ctrl_c()?;
+    }
+
+    println!("Attempting to unmount");
+    drop(mount);
+    
     Ok(())
 }

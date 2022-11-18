@@ -9,10 +9,13 @@ repository = "https://github.com/LevitatingBusinessMan/reddit-fs"
 license = "MIT"
 
 [dependencies]
-fuser = "0.11.1"
+#fuser = "0.11.1"
+fuser = {path = "./fuser"}
 anyhow = "1.0.48"
 libc = "0.2.108"
 lazy_static = "1.4.0"
 orca = "0.7.0"
 serde_json = "1.0.71"
 clap = { version = "4.0.26", features = ["derive"] }
+#ctrlc = "3.2.3"
+ctrlc = {path = "./ctrlc"}
