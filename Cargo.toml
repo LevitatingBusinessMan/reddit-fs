@@ -9,8 +9,7 @@ repository = "https://github.com/LevitatingBusinessMan/reddit-fs"
 license = "MIT"
 
 [dependencies]
-#fuser = "0.11.1"
-fuser = {path = "./fuser"}
+fuser = {version = "0.11.1", package="levitating-fuser"}
 anyhow = "1.0.48"
 libc = "0.2.108"
 lazy_static = "1.4.0"
