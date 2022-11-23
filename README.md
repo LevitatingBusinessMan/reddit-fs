@@ -26,6 +26,7 @@ https://fedoramagazine.org/announcing-fedora-37/
 ```
 
 #### Installation
+Make sure `fuse` is installed.
 ```SH
 cargo install reddit-fs
 ```
