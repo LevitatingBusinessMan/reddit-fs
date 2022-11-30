@@ -452,22 +452,22 @@ fn main() -> Result<()> {
             //MountOption::AllowOther, MountOption::AutoUnmount, 
         ]).unwrap();
 
-        // Export the session address for unmounting
-        let mount = std::mem::take(&mut sesh.mount);
-        tx.send(mount).unwrap();
+        let unmounter = sesh.unmount_callable();
+        tx.send(unmounter).unwrap();
 
         // Start the session
         sesh.run().unwrap();
     });
 
-    let mount = rx.recv().unwrap().unwrap();
+    let mut unmounter = rx.recv().unwrap();
     
+    // Wait for sigkill
     let (tx, rx) = channel();
     ctrlc::set_handler(move || tx.send(()).unwrap()).unwrap();
     rx.recv().unwrap();
 
     println!("Attempting to unmount");
-    drop(mount);
+    unmounter.unmount()?;
     
     Ok(())
 }

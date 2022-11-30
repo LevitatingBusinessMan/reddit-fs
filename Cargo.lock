@@ -390,6 +390,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
+name = "fuser"
+version = "0.11.1"
+source = "git+https://github.com/cberner/fuser.git?branch=unmount#9941bf4b380227e07d13bfbacebc57e14b94655b"
+dependencies = [
+ "libc",
+ "log 0.4.17",
+ "memchr",
+ "page_size",
+ "pkg-config",
+ "smallvec 1.10.0",
+ "users",
+ "zerocopy",
+]
+
+[[package]]
 name = "futures"
 version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -621,22 +636,6 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-
-[[package]]
-name = "levitating-fuser"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e472ffab782c513e85351aff1304af75698712e9b1222971e4ae5980e8f7be0"
-dependencies = [
- "libc",
- "log 0.4.17",
- "memchr",
- "page_size",
- "pkg-config",
- "smallvec 1.10.0",
- "users",
- "zerocopy",
-]
 
 [[package]]
 name = "libc"
@@ -1076,8 +1075,8 @@ dependencies = [
  "anyhow",
  "clap",
  "ctrlc",
+ "fuser",
  "lazy_static",
- "levitating-fuser",
  "libc",
  "orca",
  "serde_json",
